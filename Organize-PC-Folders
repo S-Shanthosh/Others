@@ -1,0 +1,61 @@
+$downloadsPath = "C:\Users\Windows\Downloads\New folder"
+
+$categories = @{
+    "Images"     = @(".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".svg", ".ico", ".tiff", ".heic")
+    "Videos"     = @(".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v")
+    "Audio"      = @(".mp3", ".wav", ".flac", ".aac", ".ogg", ".m4a", ".wma")
+    "Documents"  = @(".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".csv", ".rtf")
+    "Archives"   = @(".zip", ".rar", ".7z", ".tar", ".gz", ".iso")
+    "Installers" = @(".exe", ".msi", ".msix", ".bat", ".cmd")
+    "Code"       = @(".py", ".js", ".ts", ".html", ".css", ".json", ".xml", ".yaml", ".yml", ".sh", ".ps1", ".tf", ".java", ".cpp", ".cs")
+    "Fonts"      = @(".ttf", ".otf", ".woff", ".woff2")
+}
+
+$movedCount = 0
+$skippedCount = 0
+
+$files = Get-ChildItem -Path $downloadsPath -File
+
+Write-Host "Starting cleanup... Total files: $($files.Count)"
+
+foreach ($file in $files) {
+    if ($file.Name -eq "organize_log.txt") { continue }
+
+    $ext = $file.Extension.ToLower()
+    $targetFolder = "Others"
+
+    foreach ($category in $categories.Keys) {
+        if ($categories[$category] -contains $ext) {
+            $targetFolder = $category
+            break
+        }
+    }
+
+    $targetPath = Join-Path $downloadsPath $targetFolder
+    if (-not (Test-Path $targetPath)) {
+        New-Item -ItemType Directory -Path $targetPath | Out-Null
+        Write-Host "Created folder: $targetFolder"
+    }
+
+    $destFile = Join-Path $targetPath $file.Name
+    if (Test-Path $destFile) {
+        $nameWithoutExt = [System.IO.Path]::GetFileNameWithoutExtension($file.Name)
+        $extension = $file.Extension
+        $counter = 1
+        while (Test-Path $destFile) {
+            $destFile = Join-Path $targetPath ($nameWithoutExt + "_" + $counter + $extension)
+            $counter++
+        }
+    }
+
+    try {
+        Move-Item -Path $file.FullName -Destination $destFile
+        Write-Host "Moved: $($file.Name) -> $targetFolder"
+        $movedCount++
+    } catch {
+        Write-Host "Skipped: $($file.Name)"
+        $skippedCount++
+    }
+}
+
+Write-Host "Done! Moved: $movedCount files. Skipped: $skippedCount files."
