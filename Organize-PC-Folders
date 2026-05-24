@@ -1,61 +1,73 @@
-$downloadsPath = "C:\Users\Windows\Downloads\New folder"
+# Downloads Folder Organizer by Shanthosh
+# Modify $basePath before running!
+
+$basePath = "C:\Users\Windows\Downloads\New folder"
 
 $categories = @{
-    "Images"     = @(".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".svg", ".ico", ".tiff", ".heic")
-    "Videos"     = @(".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v")
-    "Audio"      = @(".mp3", ".wav", ".flac", ".aac", ".ogg", ".m4a", ".wma")
-    "Documents"  = @(".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".csv", ".rtf")
-    "Archives"   = @(".zip", ".rar", ".7z", ".tar", ".gz", ".iso")
-    "Installers" = @(".exe", ".msi", ".msix", ".bat", ".cmd")
-    "Code"       = @(".py", ".js", ".ts", ".html", ".css", ".json", ".xml", ".yaml", ".yml", ".sh", ".ps1", ".tf", ".java", ".cpp", ".cs")
-    "Fonts"      = @(".ttf", ".otf", ".woff", ".woff2")
+    "Images"       = @(".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".heic", ".tiff")
+    "Videos"       = @(".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm")
+    "Audio"        = @(".mp3", ".wav", ".flac", ".aac", ".ogg", ".m4a", ".wma")
+    "Documents"    = @(".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".csv", ".rtf")
+    "Archives"     = @(".zip", ".rar", ".7z", ".tar", ".gz", ".iso")
+    "Installers"   = @(".exe", ".msi", ".msix", ".bat", ".cmd")
+    "Code"         = @(".py", ".js", ".ts", ".html", ".css", ".json", ".xml", ".yaml", ".yml", ".sh", ".ps1", ".tf", ".java", ".cs")
+    "Entertainment"= @(".rom", ".iso")
 }
 
-$movedCount = 0
-$skippedCount = 0
+$gameFolders = @("Rise Of Nations + Thrones & Patriots", "Rise.of.Nations.Extended.Edition.v1.10")
+$photoFolders = @("Photos", "Photos1", "iPhone-photos", "jpeg_images", "heic_images", "Heic to JPG", "sample-photos")
 
-$files = Get-ChildItem -Path $downloadsPath -File
-
-Write-Host "Starting cleanup... Total files: $($files.Count)"
-
-foreach ($file in $files) {
-    if ($file.Name -eq "organize_log.txt") { continue }
-
-    $ext = $file.Extension.ToLower()
-    $targetFolder = "Others"
-
-    foreach ($category in $categories.Keys) {
-        if ($categories[$category] -contains $ext) {
-            $targetFolder = $category
-            break
-        }
-    }
-
-    $targetPath = Join-Path $downloadsPath $targetFolder
-    if (-not (Test-Path $targetPath)) {
-        New-Item -ItemType Directory -Path $targetPath | Out-Null
-        Write-Host "Created folder: $targetFolder"
-    }
-
-    $destFile = Join-Path $targetPath $file.Name
-    if (Test-Path $destFile) {
-        $nameWithoutExt = [System.IO.Path]::GetFileNameWithoutExtension($file.Name)
-        $extension = $file.Extension
-        $counter = 1
-        while (Test-Path $destFile) {
-            $destFile = Join-Path $targetPath ($nameWithoutExt + "_" + $counter + $extension)
-            $counter++
-        }
-    }
-
-    try {
-        Move-Item -Path $file.FullName -Destination $destFile
-        Write-Host "Moved: $($file.Name) -> $targetFolder"
-        $movedCount++
-    } catch {
-        Write-Host "Skipped: $($file.Name)"
-        $skippedCount++
+# Move game folders to Entertainment
+$entPath = Join-Path $basePath "Entertainment"
+if (-not (Test-Path $entPath)) { New-Item -ItemType Directory -Path $entPath | Out-Null }
+foreach ($folder in $gameFolders) {
+    $src = Join-Path $basePath $folder
+    if (Test-Path $src) {
+        Move-Item -LiteralPath $src -Destination $entPath
+        Write-Host "Entertainment: $folder"
     }
 }
 
-Write-Host "Done! Moved: $movedCount files. Skipped: $skippedCount files."
+# Merge photo folders into Images
+$imgPath = Join-Path $basePath "Images"
+if (-not (Test-Path $imgPath)) { New-Item -ItemType Directory -Path $imgPath | Out-Null }
+foreach ($folder in $photoFolders) {
+    $src = Join-Path $basePath $folder
+    if (Test-Path $src) {
+        Get-ChildItem -Path $src -File | ForEach-Object {
+            $dst = Join-Path $imgPath $_.Name
+            $counter = 1
+            while (Test-Path -LiteralPath $dst) {
+                $dst = Join-Path $imgPath ($_.BaseName + "_$counter" + $_.Extension)
+                $counter++
+            }
+            Move-Item -LiteralPath $_.FullName -Destination $dst
+        }
+        Remove-Item -LiteralPath $src -Recurse -Force
+        Write-Host "Merged: $folder -> Images"
+    }
+}
+
+# Sort all loose files
+$moved = 0
+Get-ChildItem -Path $basePath -File | ForEach-Object {
+    if ($_.Name -like "Organize-*.ps1") { return }
+    $ext = $_.Extension.ToLower()
+    $target = "Others"
+    foreach ($cat in $categories.Keys) {
+        if ($categories[$cat] -contains $ext) { $target = $cat; break }
+    }
+    $targetPath = Join-Path $basePath $target
+    if (-not (Test-Path $targetPath)) { New-Item -ItemType Directory -Path $targetPath | Out-Null }
+    $dst = Join-Path $targetPath $_.Name
+    $counter = 1
+    while (Test-Path -LiteralPath $dst) {
+        $dst = Join-Path $targetPath ($_.BaseName + "_$counter" + $_.Extension)
+        $counter++
+    }
+    Move-Item -LiteralPath $_.FullName -Destination $dst
+    Write-Host "Moved: $($_.Name) -> $target"
+    $moved++
+}
+
+Write-Host "`nDone! $moved files organized."
